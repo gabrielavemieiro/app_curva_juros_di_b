@@ -4,7 +4,9 @@ import pandas as pd
 import numpy as np
 import holidays
 import plotly.graph_objects as go
+from utils.math_utils import calcular_curva_spline
 #from scipy.interpolate import CubicSpline
+
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Curva de Juros - DI Futuro", layout="wide")
@@ -27,7 +29,7 @@ def fetch_curva_di():
         ultima_atualizacao = arquivo['Msg']['dtTm']
         scty_list = arquivo['Scty']
         
-      
+
         data = {
             'simbolo': [s['symb'] for s in scty_list],
             'vencto': [s['asset']['AsstSummry']['mtrtyCode'] for s in scty_list],
@@ -54,10 +56,26 @@ def processar_dados(df, lista_feriados):
     df = df[df['taxa_corrente'] > 0].sort_values('vencto').reset_index(drop=True)
     return df
 
+
 def classificar_inclinacao(valor):
     if valor > 0.20: return "🟢 Inclinada"
     elif valor < -0.20: return "🔴 Invertida"
     else: return "🟡 Plana"
+
+
+
+# ---- Lógica da interpolação -----
+@st.cache_data(ttl=30)
+def processar_visualizacao(df):
+    # Curva interpolada para D0
+    x_d0, y_d0 = calcular_curva_spline(df, "taxa_corrente")
+    
+    # Curva interpolada para D-1
+    x_d1, y_d1 = calcular_curva_spline(df, "taxa_dia_anterior")
+    
+    return (x_d0, y_d0), (x_d1, y_d1)
+
+
 
 # --- 4. FRAGMENTO ---
 @st.fragment(run_every="30s")
@@ -97,17 +115,62 @@ def render_monitor():
 
         st.caption(f"🕒 Última atualização B3: {ultima_att}")
 
+
+    # Processa o cálculo da interpolação (cacheado em camada única)
+    # Retorna as tuplas: ((x0, y0), (x1, y1))
+    curva_d0, curva_d1 = processar_visualizacao(df)
+    
+    x_smooth_d0, y_smooth_d0 = curva_d0
+    x_smooth_d1, y_smooth_d1 = curva_d1
+
+
+
     # --- GRÁFICO ---
     fig = go.Figure()
-    # Adicionando D-1
-    fig.add_trace(go.Scatter(x=df["DIAS_UTEIS"], y=df["taxa_dia_anterior"], mode="lines+markers", 
-                             line=dict(color="orange", dash="dash"), name="Taxa D-1"))
-    # Adicionando D0
-    fig.add_trace(go.Scatter(x=df["DIAS_UTEIS"], y=df["taxa_corrente"], mode="lines+markers", 
-                             line=dict(color="#1f77b4"), name="Taxa Atual (D0)"))
     
-    fig.update_layout(title="Estrutura a Termo - DI Futuro", hovermode="x unified", height=500)
+    # 1. LINHA INTERPOLADA D-1 (Tracejada)
+    fig.add_trace(go.Scatter(
+        x=x_smooth_d1, y=y_smooth_d1,
+        mode="lines",
+        line=dict(color="orange", dash="dash", width=1),
+        name="Curva D-1 (Spline)"
+        #,hoverinfo='skip' # pra não ficar mt poluído
+    ))
+
+    # 2. PONTOS REAIS D-1 (Vértices)
+    fig.add_trace(go.Scatter(
+        x=df["DIAS_UTEIS"], y=df["taxa_dia_anterior"],
+        mode="markers",
+        marker=dict(color="orange", size=6, symbol="circle"),
+        name="Vértices D-1"
+    ))
+
+    # 3. LINHA INTERPOLADA D0 
+    fig.add_trace(go.Scatter(
+        x=x_smooth_d0, y=y_smooth_d0,
+        mode="lines",
+        line=dict(color="#1f77b4", width=2),
+        name="Curva Atual (Spline)"
+        #,hoverinfo='skip'
+    ))
+
+    # 4. PONTOS REAIS D0 (Vértices)
+    fig.add_trace(go.Scatter(
+        x=df["DIAS_UTEIS"], y=df["taxa_corrente"],
+        mode="markers",
+        marker=dict(color="#1f77b4", size=8),
+        name="Vértices D0 (Spot)"
+    ))
+
+    fig.update_layout(
+        title="Estrutura a Termo - DI Futuro (Com Interpolação Cubic Spline)",
+        xaxis_title="Dias Úteis",
+        yaxis_title="Taxa (%)",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
     st.plotly_chart(fig, use_container_width=True)
+
 
     # --- TABELA RANKING DE LIQUIDEZ ---
     st.subheader("📊 Contratos mais negociados: acompanhamento da liquidez")
