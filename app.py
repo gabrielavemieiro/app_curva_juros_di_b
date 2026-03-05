@@ -266,20 +266,37 @@ def render_monitor():
     st.plotly_chart(fig_fwd, use_container_width=True)
     
 # --- EXECUÇÃO PRINCIPAL ---
-st.title("📈 Curva de Juros - DI Futuro")
-st.write("Dashboard escalável para múltiplos usuários com cache compartilhado.")
+st.title("📈 Monitoramento da Curva de Juros (Contratos de DI Futuro)")
+#st.write("Dashboard escalável para múltiplos usuários com cache compartilhado.")
 
 render_monitor()
 
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: #1f77b4;'>"
+    "<div style='text-align: center; color: #9E9D9D;'>"
     "Desenvolvido por Gabriela Vemieiro"
     "</div>",
     unsafe_allow_html=True
 )
-with st.sidebar:
-    st.header("Informações")
-    st.write("Dashboard escalável para múltiplos usuários com cache compartilhado.")
+# with st.sidebar:
+#     st.header("Informações")
+#     st.write("Dashboard escalável para múltiplos usuários com cache compartilhado.")
 
+
+# --- Melhorias estética
+# esconder o menu do github
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
+# adicionando um favicon 
+st.set_page_config (
+    page_title="Curva de Juros - DI Futuro",
+    page_icon="📈",
+    layout="wide")
